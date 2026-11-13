@@ -1,11 +1,43 @@
-using Microsoft.AspNetCore.Mvc; using MedicalApi.Models;
+п»їusing MedicalApi.Data;
+using MedicalApi.Models;
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
+
 namespace MedicalApi.Controllers;
-[ApiController,Route("api/[controller]")] public class AppointmentsController:ControllerBase {
- public static List<Appointment> Appointments=new();
- [HttpGet,ProducesResponseType(typeof(List<Appointment>),200)] public ActionResult<List<Appointment>> GetAll()=>Ok(Appointments);
- [HttpGet("{id}"),ProducesResponseType(typeof(Appointment),200),ProducesResponseType(404)] public ActionResult<Appointment> GetById(int id)=>Appointments.FirstOrDefault(x=>x.Id==id) is {} a?Ok(a):NotFound();
- string? Validate(Appointment a)=>!PatientsController.Patients.Any(x=>x.Id==a.PatientId)?"Пациент не найден":string.IsNullOrWhiteSpace(a.DoctorName)||string.IsNullOrWhiteSpace(a.Specialty)?"Укажите врача и специальность":a.StartsAt<=DateTime.Now?"Время приёма должно быть в будущем":string.IsNullOrWhiteSpace(a.Room)?"Укажите кабинет":null;
- [HttpPost,ProducesResponseType(typeof(Appointment),201),ProducesResponseType(400)] public ActionResult<Appointment> Create(Appointment a){var e=Validate(a);if(e!=null)return BadRequest(e);a.Id=Appointments.Count==0?1:Appointments.Max(x=>x.Id)+1;Appointments.Add(a);return CreatedAtAction(nameof(GetById),new{id=a.Id},a);}
- [HttpPut("{id}"),ProducesResponseType(typeof(Appointment),200),ProducesResponseType(400),ProducesResponseType(404)] public ActionResult<Appointment> Update(int id,Appointment input){var a=Appointments.FirstOrDefault(x=>x.Id==id);if(a==null)return NotFound();var e=Validate(input);if(e!=null)return BadRequest(e);input.Id=id;Appointments[Appointments.IndexOf(a)]=input;return Ok(input);}
- [HttpDelete("{id}"),ProducesResponseType(204),ProducesResponseType(404)] public ActionResult Delete(int id){var a=Appointments.FirstOrDefault(x=>x.Id==id);if(a==null)return NotFound();Appointments.Remove(a);return NoContent();}
+
+[ApiController, Route("api/[controller]")]
+public class AppointmentsController(MedicalDbContext db) : ControllerBase
+{
+    [HttpGet] public async Task<List<Appointment>> GetAll() => await db.Appointments.OrderBy(a => a.StartsAt).ToListAsync();
+    [HttpGet("{id}")] public async Task<ActionResult<Appointment>> GetById(int id) => await db.Appointments.FindAsync(id) is { } a ? a : NotFound();
+
+    [HttpPost]
+    public async Task<ActionResult<Appointment>> Create(Appointment input)
+    {
+        input.Id = 0; var error = await Validate(input); if (error != null) return BadRequest(error);
+        db.Appointments.Add(input); await db.SaveChangesAsync();
+        return CreatedAtAction(nameof(GetById), new { id = input.Id }, input);
+    }
+
+    [HttpPut("{id}")]
+    public async Task<ActionResult<Appointment>> Update(int id, Appointment input)
+    {
+        var a = await db.Appointments.FindAsync(id); if (a == null) return NotFound();
+        var error = await Validate(input); if (error != null) return BadRequest(error);
+        a.PatientId = input.PatientId; a.DoctorName = input.DoctorName; a.Specialty = input.Specialty; a.StartsAt = input.StartsAt; a.Room = input.Room;
+        await db.SaveChangesAsync(); return a;
+    }
+
+    [HttpDelete("{id}")]
+    public async Task<IActionResult> Delete(int id)
+    {
+        var a = await db.Appointments.FindAsync(id); if (a == null) return NotFound();
+        db.Appointments.Remove(a); await db.SaveChangesAsync(); return NoContent();
+    }
+
+    private async Task<string?> Validate(Appointment a) =>
+        !await db.Patients.AnyAsync(p => p.Id == a.PatientId) ? "РџР°С†РёРµРЅС‚ РЅРµ РЅР°Р№РґРµРЅ" :
+        string.IsNullOrWhiteSpace(a.DoctorName) || string.IsNullOrWhiteSpace(a.Specialty) ? "РЈРєР°Р¶РёС‚Рµ РІСЂР°С‡Р° Рё СЃРїРµС†РёР°Р»СЊРЅРѕСЃС‚СЊ" :
+        a.StartsAt == default || a.StartsAt <= DateTime.Now ? "Р’СЂРµРјСЏ РїСЂРёС‘РјР° РґРѕР»Р¶РЅРѕ Р±С‹С‚СЊ РІ Р±СѓРґСѓС‰РµРј" :
+        string.IsNullOrWhiteSpace(a.Room) ? "РЈРєР°Р¶РёС‚Рµ РєР°Р±РёРЅРµС‚" : null;
 }

@@ -1,1 +1,11 @@
-namespace MedicalApi.Models; public class Spravka { public int Id {get;set;} public string Name {get;set;}=""; public int PatientId {get;set;} public int SpravkaTypeId {get;set;} public decimal Price {get;set;} public DateTime IssuedAt {get;set;}=DateTime.Today; }
+﻿namespace MedicalApi.Models;
+
+public class Spravka
+{
+    public int Id { get; set; }
+    public string Name { get; set; } = "";
+    public int PatientId { get; set; }
+    public int SpravkaTypeId { get; set; }
+    public decimal Price { get; set; }
+    public DateOnly IssuedAt { get; set; } = DateOnly.FromDateTime(DateTime.Today);
+}

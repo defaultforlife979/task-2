@@ -1,12 +1,74 @@
-using Microsoft.AspNetCore.Mvc; using MedicalApi.Models;
+п»їusing MedicalApi.Data;
+using MedicalApi.Models;
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
+
 namespace MedicalApi.Controllers;
-[ApiController,Route("api/[controller]")] public class PatientsController:ControllerBase {
- public static List<Patient> Patients=new();
- [HttpGet,ProducesResponseType(typeof(List<Patient>),200)] public ActionResult<List<Patient>> GetAll()=>Ok(Patients);
- [HttpGet("{id}"),ProducesResponseType(typeof(Patient),200),ProducesResponseType(404)] public ActionResult<Patient> GetById(int id)=>Patients.FirstOrDefault(x=>x.Id==id) is {} p?Ok(p):NotFound();
- [HttpGet("{id}/spravki"),ProducesResponseType(typeof(List<Spravka>),200),ProducesResponseType(404)] public ActionResult<List<Spravka>> GetSpravki(int id)=>Patients.Any(x=>x.Id==id)?Ok(SpravkiController.Spravki.Where(x=>x.PatientId==id).ToList()):NotFound();
- string? Validate(Patient p)=>string.IsNullOrWhiteSpace(p.Name)?"Имя обязательно":p.BirthDate==default||p.BirthDate>DateTime.Today?"Укажите корректную дату рождения":string.IsNullOrWhiteSpace(p.Phone)?"Телефон обязателен":null;
- [HttpPost,ProducesResponseType(typeof(Patient),201),ProducesResponseType(400)] public ActionResult<Patient> Create(Patient p){var e=Validate(p);if(e!=null)return BadRequest(e);p.Id=Patients.Count==0?1:Patients.Max(x=>x.Id)+1;Patients.Add(p);return CreatedAtAction(nameof(GetById),new{id=p.Id},p);}
- [HttpPut("{id}"),ProducesResponseType(typeof(Patient),200),ProducesResponseType(400),ProducesResponseType(404)] public ActionResult<Patient> Update(int id,Patient input){var p=Patients.FirstOrDefault(x=>x.Id==id);if(p==null)return NotFound();var e=Validate(input);if(e!=null)return BadRequest(e);input.Id=id;Patients[Patients.IndexOf(p)]=input;return Ok(input);}
- [HttpDelete("{id}"),ProducesResponseType(204),ProducesResponseType(404)] public ActionResult Delete(int id){var p=Patients.FirstOrDefault(x=>x.Id==id);if(p==null)return NotFound();Patients.Remove(p);SpravkiController.Spravki.RemoveAll(x=>x.PatientId==id);AppointmentsController.Appointments.RemoveAll(x=>x.PatientId==id);return NoContent();}
+
+[ApiController, Route("api/[controller]")]
+public class PatientsController(MedicalDbContext db) : ControllerBase
+{
+    [HttpGet]
+    public async Task<List<Patient>> GetAll(string? name)
+    {
+        IQueryable<Patient> query = db.Patients;
+        if (!string.IsNullOrWhiteSpace(name)) query = query.Where(p => EF.Functions.ILike(p.Name, $"%{name}%"));
+        return await query.OrderBy(p => p.Name).ToListAsync();
+    }
+
+    [HttpGet("{id}")]
+    public async Task<ActionResult<Patient>> GetById(int id) => await db.Patients.FirstOrDefaultAsync(p => p.Id == id) is { } p ? p : NotFound();
+
+    [HttpGet("{id}/spravki")]
+    public async Task<ActionResult<List<Spravka>>> GetSpravki(int id)
+    {
+        if (!await db.Patients.AnyAsync(p => p.Id == id)) return NotFound();
+        return await db.Spravki.Where(s => s.PatientId == id).OrderByDescending(s => s.IssuedAt).ToListAsync();
+    }
+
+    [HttpPost]
+    public async Task<ActionResult<Patient>> Create(Patient patient)
+    {
+        patient.Id = 0;
+        var error = Validate(patient);
+        if (error != null) return BadRequest(error);
+        db.Patients.Add(patient);
+        await db.SaveChangesAsync();
+        return CreatedAtAction(nameof(GetById), new { id = patient.Id }, patient);
+    }
+
+    [HttpPut("{id}")]
+    public async Task<ActionResult<Patient>> Update(int id, Patient input)
+    {
+        var patient = await db.Patients.FindAsync(id);
+        if (patient == null) return NotFound();
+        input.Id = id;
+        var error = Validate(input);
+        if (error != null) return BadRequest(error);
+        patient.Name = input.Name; patient.BirthDate = input.BirthDate; patient.Phone = input.Phone;
+        patient.Address = input.Address; patient.HasAllergies = input.HasAllergies; patient.Email = input.Email;
+        await db.SaveChangesAsync();
+        return patient;
+    }
+
+    [HttpDelete("{id}")]
+    public async Task<IActionResult> Delete(int id)
+    {
+        var patient = await db.Patients.FindAsync(id);
+        if (patient == null) return NotFound();
+        if (await db.Spravki.AnyAsync(s => s.PatientId == id) || await db.Appointments.AnyAsync(a => a.PatientId == id))
+            return BadRequest("РќРµР»СЊР·СЏ СѓРґР°Р»РёС‚СЊ РїР°С†РёРµРЅС‚Р°: РµСЃС‚СЊ СЃРїСЂР°РІРєРё РёР»Рё Р·Р°РїРёСЃРё РЅР° РїСЂРёС‘Рј.");
+        db.Patients.Remove(patient);
+        await db.SaveChangesAsync();
+        return NoContent();
+    }
+
+    private static string? Validate(Patient p) =>
+        string.IsNullOrWhiteSpace(p.Name) ? "РРјСЏ РѕР±СЏР·Р°С‚РµР»СЊРЅРѕ" :
+        p.BirthDate == default || p.BirthDate > DateOnly.FromDateTime(DateTime.Today) ? "РЈРєР°Р¶РёС‚Рµ РєРѕСЂСЂРµРєС‚РЅСѓСЋ РґР°С‚Сѓ СЂРѕР¶РґРµРЅРёСЏ" :
+        string.IsNullOrWhiteSpace(p.Phone) ? "РўРµР»РµС„РѕРЅ РѕР±СЏР·Р°С‚РµР»РµРЅ" : null;
 }
+
+
+
+

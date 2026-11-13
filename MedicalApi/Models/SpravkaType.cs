@@ -1,1 +1,11 @@
-namespace MedicalApi.Models; public class SpravkaType { public int Id {get;set;} public string Name {get;set;}=""; public decimal Price {get;set;} public int ValidDays {get;set;} public bool RequiresDoctorExam {get;set;} public string AgeGroup {get;set;}="Âñå âîçğàñòû"; }
+ï»¿namespace MedicalApi.Models;
+
+public class SpravkaType
+{
+    public int Id { get; set; }
+    public string Name { get; set; } = "";
+    public decimal Price { get; set; }
+    public int ValidDays { get; set; }
+    public bool RequiresDoctorExam { get; set; }
+    public string AgeGroup { get; set; } = "Ğ’ÑĞµ Ğ²Ğ¾Ğ·Ñ€Ğ°ÑÑ‚Ñ‹";
+}
